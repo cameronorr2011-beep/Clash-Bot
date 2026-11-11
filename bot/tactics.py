@@ -5,16 +5,23 @@ The DQN proposes a play, referee.py scores it after the fact; this module is the
 showing up in the reward ledger and in the mentor feed, and neither is a
 learning problem — both are decidable from the current observation:
 
-  1. Defending an empty lane (or dropping center_back) at 8-10 elixir, i.e.
+  1. Defending an empty lane (or dropping center_back) at 7+ elixir, i.e.
      converting nothing while the opponent banks elixir.
   2. Defending the wrong lane while a live push is on the other side.
 
 Pure functions: no torch, no I/O, no globals mutated. Safe to unit test and safe
 to call on the phone where torch is expensive.
 
+Placement indices are resolved from the BOT's own spot-name list, never
+hardcoded: bot_ml.SPOT_NAMES is ["bridge_left", "bridge_right", "left_defend",
+"right_defend", "center_back"], so index 4 is center_back — the exact opposite
+end of the list from "right". Passing the list in keeps this module correct for
+both the desktop and phone builds.
+
 API
 ---
-advise(action, elixir, hand_deck, afford, towers, arena, cards_db) -> (action, note)
+advise(action, elixir, hand_deck, afford, towers, arena, cards_db,
+       spot_names=SPOT_NAMES) -> (action, note)
 
 `note` is "" when the plan is already sound. A non-empty note is a short rule
 label the bot logs verbatim (it surfaces in the dashboard's decision
@@ -22,7 +29,7 @@ provenance). Callers must treat the NOTE, not the action, as the override
 signal: returning the same action with an empty note means "checked, no change".
 """
 
-SPOT_NAMES = ("center_back", "bridge_left", "left_defend", "bridge_right", "right_defend")
+SPOT_NAMES = ("bridge_left", "bridge_right", "left_defend", "right_defend", "center_back")
 
 # A lane counts as threatened at 4+ px of enemy health bar in it (the vision
 # scanner reports bar pixels, not unit counts — 4px is roughly one mid troop).
@@ -57,6 +64,14 @@ def _cost(cards_db, name, default=4):
     return int(_num(_info(cards_db, name).get("cost"), default))
 
 
+def spot_index(spot_names, name):
+    """Index of a spot by NAME in the bot's own list; None if the bot lacks it."""
+    try:
+        return list(spot_names).index(name)
+    except (ValueError, AttributeError):
+        return None
+
+
 def threat_lanes(arena, threat_px=THREAT_PX):
     """(left_px, right_px) of enemy presence per lane.
 
@@ -88,6 +103,16 @@ def advise(action, elixir, hand_deck, afford, towers, arena, cards_db,
     action = int(action)
     slot, spot_i = divmod(action, 5)
 
+    # Resolve every placement this module can redirect, by name, once.
+    i_bridge = {"left": spot_index(spot_names, "bridge_left"),
+                "right": spot_index(spot_names, "bridge_right")}
+    i_defend = {"left": spot_index(spot_names, "left_defend"),
+                "right": spot_index(spot_names, "right_defend")}
+    i_center = spot_index(spot_names, "center_back")
+    if None in i_bridge.values() or None in i_defend.values() or i_center is None:
+        return action, ""                    # unknown spot model: never guess
+    passive = {i_center, i_defend["left"], i_defend["right"]}
+
     playable = [i for i in range(min(4, len(hand_deck)))
                 if i < len(afford) and _num(afford[i]) >= 0.9]
     if not playable:
@@ -103,21 +128,20 @@ def advise(action, elixir, hand_deck, afford, towers, arena, cards_db,
     # Rule 1 — live push: answer the lane that is actually under attack.
     if left >= threat_px or right >= threat_px:
         side = "left" if left >= right else "right"
-        want = 2 if side == "left" else 4          # left_defend / right_defend
-        defending = spot == spot_names[want]
-        # a same-side bridge drop is a legitimate counter-push, not a blunder
-        countering = spot in ("bridge_left", "bridge_right") and spot.endswith(side)
-        if not (defending or countering):
-            return slot * 5 + want, f"defend_{side} (push {max(left, right):.0f}px)"
+        if spot != spot_names[i_defend[side]]:
+            # a same-side bridge drop is a legitimate counter-push
+            countering = spot_i == i_bridge[side]
+            if not countering:
+                return slot * 5 + i_defend[side], \
+                    f"defend_{side} (push {max(left, right):.0f}px)"
         return action, ""
 
     # Rule 2 — nothing to defend: do not burn elixir on defence/center at a
     # high bank. Push the cheaper tower instead of converting nothing.
-    if _num(elixir) >= push_elixir and spot in ("center_back", "left_defend", "right_defend"):
+    if _num(elixir) >= push_elixir and spot_i in passive:
         side = weak_side(towers)
         if side:
-            spot_want = 1 if side == "left" else 3  # bridge_left / bridge_right
-            return slot * 5 + spot_want, \
+            return slot * 5 + i_bridge[side], \
                 f"pressure_{side} (no threat at {_num(elixir):.0f} elixir)"
 
     return action, ""

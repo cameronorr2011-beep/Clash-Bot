@@ -1090,7 +1090,8 @@ def card_play_policy(action, mlxir, lane, arena, towers, afford, hand_deck, fini
     try:
         import tactics as _tactics
         _t_act, _t_note = _tactics.advise(
-            action, mlxir, hand_deck, afford, towers, arena, CARDS_DB)
+            action, mlxir, hand_deck, afford, towers, arena, CARDS_DB,
+            spot_names=SPOT_NAMES)
         if _t_note and _t_act != action:
             return _t_act, _t_note
     except Exception:
