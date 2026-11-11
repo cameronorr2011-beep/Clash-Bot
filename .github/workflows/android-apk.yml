@@ -47,17 +47,25 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-33" "build-tools;33.0.2" || true
 
-      - name: Sync bot sources into the app
-        run: |
-          mkdir -p android/app/src/main/python android/app/src/main/assets/neuroml
-          cp bot/*.py android/app/src/main/python/
-          rm -f android/app/src/main/python/test_*.py android/app/src/main/python/sync_mirrors.py
-          cp bot/cards.json bot/cards_v2.json bot/meta_decks.json bot/my_deck.json \
-             android/app/src/main/assets/neuroml/ 2>/dev/null || true
-
+      # No manual copy step: android/app/build.gradle's copyBotPython/copyBotData
+      # pull ../../bot during preBuild, so the APK is built from the same files
+      # the desktop localhost serves. Building is therefore also the sync.
       - name: Build release APK
         working-directory: android
         run: gradle assembleRelease --no-daemon -PchaquopyBuildPython="$(which python)"
+
+      # Parity guard: the app and the computer must serve the identical page and
+      # brain. If someone vendors a stale copy into android/, this fails here
+      # instead of shipping a phone that behaves differently from localhost.
+      - name: Verify the APK ships the same brain as localhost
+        run: |
+          set -e
+          diff -q bot/dashboard.py android/app/src/main/python/dashboard.py
+          diff -q bot/bot_ml.py android/app/src/main/python/bot_ml.py
+          diff -q bot/tactics.py android/app/src/main/python/tactics.py
+          diff -q bot/referee.py android/app/src/main/python/referee.py
+          diff -q bot/my_deck.json android/app/src/main/assets/neuroml/my_deck.json
+          echo "parity ok: APK == bot/ == desktop localhost"
 
       - name: Stage APK
         run: |

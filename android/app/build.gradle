@@ -11,8 +11,8 @@ android {
         applicationId "com.neuroml.app"
         minSdk 24
         targetSdk 33
-        versionCode 30
-        versionName "30.0"
+        versionCode 33
+        versionName "33.0"
 
         ndk { abiFilters "arm64-v8a" }
 
@@ -57,11 +57,14 @@ android {
     }
 }
 
-// The REAL bot ships inside the APK: copy the public_gui code (same code that
-// runs on the desktop) into the Python source folder at build time, plus the
-// json data files into assets (extracted to filesDir on first run so relative
-// path logic in bot_ml.py works unchanged).
-def botSrc = "../../public_gui"
+// The REAL bot ships inside the APK: copy bot/ — the SAME files the desktop
+// localhost runs — into the Python source folder at build time, plus the json
+// data files into assets (extracted to filesDir on first run so relative path
+// logic in bot_ml.py works unchanged).
+// ONE SOURCE OF TRUTH: never vendor a second copy of dashboard.py/bot_ml.py
+// into android/. Everything the phone runs comes from ../../bot, which is also
+// what `python dashboard.py` serves at 127.0.0.1:8765 on the computer.
+def botSrc = "../../bot"
 
 tasks.register("copyBotPython", Copy) {
     from(botSrc) {

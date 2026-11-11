@@ -21,6 +21,16 @@ phone screen ──(MediaProjection)──▶ vision ──▶ brain ──▶ t
 The dashboard is literally the same `dashboard.py` page as on the desktop, served
 on `127.0.0.1:8765` by the `:brain` process and shown in the app's WebView.
 
+**One source of truth.** `bot/` is the only copy of the brain and the dashboard.
+`android/app/build.gradle` copies it in at build time (there is no vendored
+Python under `android/`), and the APK workflow diffs the built app against `bot/`
+so the phone cannot ship a different page than `python bot/dashboard.py` serves
+on the computer:
+
+```
+bot/dashboard.py  ==  android/app/src/main/python/dashboard.py  (in the APK)
+```
+
 ## Start behaviour
 
 Opening the app starts the brain (auto-start defaults ON):
