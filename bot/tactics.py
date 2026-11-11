@@ -1,41 +1,43 @@
 """Tactical placement layer — the deterministic half of "don't play stupid".
 
-The DQN proposes a play, referee.py scores it after the fact; this module is the
-*before* check on placement alone. It exists because the same two errors kept
-showing up in the reward ledger and in the mentor feed, and neither is a
-learning problem — both are decidable from the current observation:
+The DQN proposes a play; referee.py scores it afterwards; this module is the
+*before* check. It is the rule-brain pattern used by the working open-source
+Clash Royale bots (sacha9214/clash-ai: "cheapest defender that wins the duel",
+never a Fireball on a lone Giant, counter-push behind surviving defenders;
+itzik123/ClashRoyaleAi: per-card legality masks; Duncan-17/clash-royale-ai-bot:
+rule-based policy on top of perception), reduced to what this bot's vision can
+actually support.
 
-  1. Defending an empty lane (or dropping center_back) at 7+ elixir, i.e.
-     converting nothing while the opponent banks elixir.
-  2. Defending the wrong lane while a live push is on the other side.
+Three faults it removes, none of which is a learning problem:
 
-Pure functions: no torch, no I/O, no globals mutated. Safe to unit test and safe
-to call on the phone where torch is expensive.
+  1. Answering the wrong lane while a push is live.
+  2. Spending elixir on defence when nothing is coming, or converting nothing
+     at a high bank instead of pushing the cheaper tower.
+  3. Dropping a spell at a small push — a 4-elixir Fireball on one troop is a
+     negative elixir trade no matter what the Q-values say.
 
 Placement indices are resolved from the BOT's own spot-name list, never
 hardcoded: bot_ml.SPOT_NAMES is ["bridge_left", "bridge_right", "left_defend",
-"right_defend", "center_back"], so index 4 is center_back — the exact opposite
-end of the list from "right". Passing the list in keeps this module correct for
-both the desktop and phone builds.
+"right_defend", "center_back"], so index 4 is center_back.
 
 API
 ---
 advise(action, elixir, hand_deck, afford, towers, arena, cards_db,
        spot_names=SPOT_NAMES) -> (action, note)
 
-`note` is "" when the plan is already sound. A non-empty note is a short rule
-label the bot logs verbatim (it surfaces in the dashboard's decision
-provenance). Callers must treat the NOTE, not the action, as the override
-signal: returning the same action with an empty note means "checked, no change".
+`note` is "" when the plan is already sound; a non-empty note is the rule label
+the bot logs (it shows in the dashboard's decision provenance). Callers treat
+the NOTE, not the action, as the override signal.
 """
 
 SPOT_NAMES = ("bridge_left", "bridge_right", "left_defend", "right_defend", "center_back")
 
-# A lane counts as threatened at 4+ px of enemy health bar in it (the vision
-# scanner reports bar pixels, not unit counts — 4px is roughly one mid troop).
-THREAT_PX = 4
-# At or above this elixir with no threat, defending is a wasted turn.
-PUSH_ELIXIR = 7.0
+THREAT_PX = 4        # enemy bar pixels in a lane that count as a live push
+PUSH_ELIXIR = 7.0    # bank from which doing nothing is a waste
+SWARM_PX = 12        # only at this much enemy presence is a spell worth casting
+SUPPORT_ALLY_PX = 4  # surviving friendly pixels worth pushing behind
+
+DEFENSIVE_ROLES = ("support", "building", "win_condition", "tank")
 
 
 def _num(v, default=0.0):
@@ -47,7 +49,6 @@ def _num(v, default=0.0):
 
 
 def _info(cards_db, name):
-    """Card record from the shared DB, tolerant of naming style."""
     key = (name or "").lower()
     if not key:
         return {}
@@ -60,12 +61,15 @@ def _info(cards_db, name):
         return {}
 
 
+def _role(cards_db, name):
+    return _info(cards_db, name).get("role", "support")
+
+
 def _cost(cards_db, name, default=4):
     return int(_num(_info(cards_db, name).get("cost"), default))
 
 
 def spot_index(spot_names, name):
-    """Index of a spot by NAME in the bot's own list; None if the bot lacks it."""
     try:
         return list(spot_names).index(name)
     except (ValueError, AttributeError):
@@ -73,19 +77,18 @@ def spot_index(spot_names, name):
 
 
 def threat_lanes(arena, threat_px=THREAT_PX):
-    """(left_px, right_px) of enemy presence per lane.
-
-    The scanner exposes both a lane total and a bridge column; either one means
-    the opponent has committed troops there, so they are summed.
-    """
     arena = arena or {}
     left = _num(arena.get("enemy_left")) + _num(arena.get("enemy_bridge_l"))
     right = _num(arena.get("enemy_right")) + _num(arena.get("enemy_bridge_r"))
     return left, right
 
 
+def ally_presence(arena):
+    arena = arena or {}
+    return _num(arena.get("ally_left")), _num(arena.get("ally_right"))
+
+
 def weak_side(towers):
-    """Which enemy tower is cheapest to push — the lower HP one still standing."""
     towers = towers or {}
     alive = [(_num(towers.get("enemy_left"), 1.0), "left"),
              (_num(towers.get("enemy_right"), 1.0), "right")]
@@ -95,50 +98,83 @@ def weak_side(towers):
     return min(alive)[1]
 
 
+def playable_slots(hand_deck, afford):
+    return [i for i in range(min(4, len(hand_deck or [])))
+            if i < len(afford or []) and _num(afford[i]) >= 0.9]
+
+
+def cheapest_defender(hand_deck, afford, cards_db, allow_spell=False):
+    """Cheapest affordable card that can actually defend -> (rank, slot, role, name).
+
+    Support/building beat a win-condition at equal cost; spells are excluded
+    unless the caller explicitly allows them.
+    """
+    best = None
+    for i in playable_slots(hand_deck, afford):
+        name = (hand_deck[i] or "").lower()
+        role = _role(cards_db, name)
+        if role == "spell" and not allow_spell:
+            continue
+        penalty = 0 if role in ("support", "building") else 1
+        rank = (_cost(cards_db, name), penalty, i)
+        if best is None or rank < best[0]:
+            best = (rank, i, role, name)
+    return best
+
+
 def advise(action, elixir, hand_deck, afford, towers, arena, cards_db,
-           spot_names=SPOT_NAMES, threat_px=THREAT_PX, push_elixir=PUSH_ELIXIR):
+           spot_names=SPOT_NAMES, threat_px=THREAT_PX, push_elixir=PUSH_ELIXIR,
+           swarm_px=SWARM_PX, support_ally_px=SUPPORT_ALLY_PX):
     """Return (possibly corrected action, rule note or "")."""
     hand_deck = hand_deck or []
     afford = afford or []
     action = int(action)
     slot, spot_i = divmod(action, 5)
 
-    # Resolve every placement this module can redirect, by name, once.
     i_bridge = {"left": spot_index(spot_names, "bridge_left"),
                 "right": spot_index(spot_names, "bridge_right")}
     i_defend = {"left": spot_index(spot_names, "left_defend"),
                 "right": spot_index(spot_names, "right_defend")}
     i_center = spot_index(spot_names, "center_back")
     if None in i_bridge.values() or None in i_defend.values() or i_center is None:
-        return action, ""                    # unknown spot model: never guess
+        return action, ""
     passive = {i_center, i_defend["left"], i_defend["right"]}
 
-    playable = [i for i in range(min(4, len(hand_deck)))
-                if i < len(afford) and _num(afford[i]) >= 0.9]
+    playable = playable_slots(hand_deck, afford)
     if not playable:
         return action, ""
     # Rule 0 — a play you cannot pay for is not a play.
     if slot not in playable:
-        keep = min(playable, key=lambda i: _cost(cards_db, hand_deck[i]))
+        fell = cheapest_defender(hand_deck, afford, cards_db, allow_spell=True)
+        keep = fell[1] if fell else playable[0]
         return keep * 5 + spot_i, f"afford:{hand_deck[keep]}"
 
     left, right = threat_lanes(arena, threat_px)
-    spot = spot_names[spot_i] if 0 <= spot_i < len(spot_names) else ""
+    cur_name = (hand_deck[slot] or "").lower()
+    cur_role = _role(cards_db, cur_name)
 
-    # Rule 1 — live push: answer the lane that is actually under attack.
+    # Rule 1 — a live push: answer that lane, with troops, cheaply.
     if left >= threat_px or right >= threat_px:
         side = "left" if left >= right else "right"
-        if spot != spot_names[i_defend[side]]:
-            # a same-side bridge drop is a legitimate counter-push
-            countering = spot_i == i_bridge[side]
-            if not countering:
-                return slot * 5 + i_defend[side], \
-                    f"defend_{side} (push {max(left, right):.0f}px)"
+        px = max(left, right)
+        target_spot = i_defend[side]
+        if cur_role == "spell" and px < swarm_px:
+            d = cheapest_defender(hand_deck, afford, cards_db)
+            if d:
+                return d[1] * 5 + target_spot, \
+                    f"defend_{side} with {d[3]} (no spell for a {px:.0f}px push)"
+        if spot_i != target_spot:
+            return slot * 5 + target_spot, f"defend_{side} (push {px:.0f}px)"
         return action, ""
 
-    # Rule 2 — nothing to defend: do not burn elixir on defence/center at a
-    # high bank. Push the cheaper tower instead of converting nothing.
+    # Rule 2 — nothing incoming: convert the bank instead of defending air.
     if _num(elixir) >= push_elixir and spot_i in passive:
+        al, ar = ally_presence(arena)
+        if max(al, ar) >= support_ally_px:
+            # counter-push behind troops that already survived a defence
+            side = "left" if al >= ar else "right"
+            return slot * 5 + i_bridge[side], \
+                f"support_{side} (allies {max(al, ar):.0f}px already on the field)"
         side = weak_side(towers)
         if side:
             return slot * 5 + i_bridge[side], \
