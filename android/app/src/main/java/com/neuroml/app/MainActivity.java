@@ -42,6 +42,7 @@ public class MainActivity extends Activity {
     private TextView status;
     private Switch brainSwitch;
     private Button updateBtn;
+    private boolean autoUpdateStarted;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -281,7 +282,7 @@ public class MainActivity extends Activity {
     private void startUpdateCheck() {
         new Thread(() -> {
             try {
-                String raw = readUrl("https://github.com/cameronorr2011-beep/Clash-Bot/releases/download/apps/NeuroML-version.txt");
+                String raw = readUrl("https://github.com/cameronorr2011-beep/Clash-Bot/releases/download/android/NeuroML-version.txt");
                 final String v = raw == null ? null : raw.trim();
                 final String mine = getPackageManager()
                         .getPackageInfo(getPackageName(), 0).versionName;
@@ -290,6 +291,15 @@ public class MainActivity extends Activity {
                     runOnUiThread(() -> {
                         updateBtn.setText("⬆ Update available: v" + v + " (installed " + mine + ")");
                         updateBtn.setVisibility(View.VISIBLE);
+                        // AUTO-UPDATE: fetch it without waiting for a tap, so a
+                        // new build lands without anyone re-installing by hand.
+                        // Android still shows ONE install confirmation — a truly
+                        // silent install needs root or device-owner privileges,
+                        // which this app deliberately does not use.
+                        if (!autoUpdateStarted) {
+                            autoUpdateStarted = true;
+                            installUpdate();
+                        }
                     });
                 }
             } catch (Exception e) {
@@ -323,11 +333,17 @@ public class MainActivity extends Activity {
     private void installUpdate() {
         try {
             File apkFile = new File(getFilesDir(), "update/NeuroML-Android.apk");
-            if (apkFile.exists() && apkFile.length() > 1_000_000) {
-                // already downloaded — straight to the installer
+            final String target = updateApkVersion();
+            String cachedVer = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .getString("update_cached_ver", "");
+            // Auto-updates must never install a stale download left over from an
+            // older release, so the cache is only reused for the advertised one.
+            if (apkFile.exists() && apkFile.length() > 1_000_000
+                    && target != null && target.equals(cachedVer)) {
                 launchInstaller(apkFile);
                 return;
             }
+            if (apkFile.exists()) apkFile.delete();
             status.setTextColor(Color.parseColor("#8b98a8"));
             status.setText("Downloading update… (5-10 MB)");
             new Thread(() -> {
@@ -335,7 +351,7 @@ public class MainActivity extends Activity {
                     File dir = new File(getFilesDir(), "update");
                     dir.mkdirs();
                     java.io.InputStream in = new java.net.URL(
-                            "https://github.com/cameronorr2011-beep/Clash-Bot/releases/download/apps/NeuroML-Android.apk")
+                            "https://github.com/cameronorr2011-beep/Clash-Bot/releases/download/android/NeuroML-Android.apk")
                             .openStream();
                     File tmp = new File(dir, "NeuroML-Android.apk.tmp");
                     try (java.io.OutputStream out = new FileOutputStream(tmp)) {
@@ -344,6 +360,8 @@ public class MainActivity extends Activity {
                         while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
                     }
                     tmp.renameTo(apkFile);
+                    getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                            .putString("update_cached_ver", target).commit();
                     runOnUiThread(() -> launchInstaller(apkFile));
                 } catch (Exception e) {
                     runOnUiThread(() -> {
@@ -383,7 +401,7 @@ public class MainActivity extends Activity {
     }
 
     private String updateApkVersion() {
-        try { return readUrl("https://github.com/cameronorr2011-beep/Clash-Bot/releases/download/apps/NeuroML-version.txt").trim(); }
+        try { return readUrl("https://github.com/cameronorr2011-beep/Clash-Bot/releases/download/android/NeuroML-version.txt").trim(); }
         catch (Exception e) { return "?"; }
     }
 
