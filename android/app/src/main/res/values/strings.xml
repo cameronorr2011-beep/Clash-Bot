@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tap_service_summary">Lets the NeuroML brain tap the game on this phone</string>
+    <string name="tap_service_desc">The NeuroML tap service performs the taps the RL brain decides inside Clash Royale. It reads no other content and never opens account or deck screens.</string>
+</resources>

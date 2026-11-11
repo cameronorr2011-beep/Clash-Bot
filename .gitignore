@@ -1,0 +1,31 @@
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+*.aab
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.venv*/
+
+# Runtime brain data — never committed (weights, replay, memory, keys, logs)
+bot/*.pt
+bot/*.bak
+bot/*.log
+bot/game_memory.json
+bot/opponent_memory.json
+bot/hippocampus.jsonl
+bot/ml_metrics.json
+bot/ml_replay.json
+bot/groq_key.txt
+bot/cr_bot/
+bot/federated_incoming/
+bot/test_brain_sandbox.json
+
+# Editors / OS
+.DS_Store
+Thumbs.db

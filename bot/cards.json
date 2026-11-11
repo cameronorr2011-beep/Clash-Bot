@@ -1,0 +1,15 @@
+{
+  "knight":    {"cost": 3, "role": "support"},
+  "archers":   {"cost": 3, "role": "support"},
+  "musketeer": {"cost": 4, "role": "support"},
+  "giant":     {"cost": 5, "role": "tank"},
+  "minipekka": {"cost": 4, "role": "win_condition"},
+  "hogrider":  {"cost": 4, "role": "win_condition"},
+  "valkyrie":  {"cost": 4, "role": "support"},
+  "skeletons": {"cost": 1, "role": "support"},
+  "fireball":  {"cost": 4, "role": "spell"},
+  "arrows":    {"cost": 3, "role": "spell"},
+  "zap":       {"cost": 2, "role": "spell"},
+  "cannon":    {"cost": 3, "role": "building"},
+  "tesla":     {"cost": 4, "role": "building"}
+}

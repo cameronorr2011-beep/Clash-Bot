@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The auto-updater hands the downloaded APK to the package installer
+         through this granted path (files-path = app filesDir). -->
+    <files-path name="update" path="update/" />
+</paths>

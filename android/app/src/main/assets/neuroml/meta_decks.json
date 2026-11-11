@@ -1,0 +1,45 @@
+{
+  "fetched_at": "2026-10-17",
+  "fetched_from": "timesaver.gg/blog/best-clash-royale-decks-october-2026 + royaleapi.com/decks/popular",
+  "meta_notes": "October 2026 Season 88 'Shocktober' balance update = ALL NERFS (no buffs). Goblin Machine -22% rocket dmg, Goblin Giant HP/range nerfed, Ice Wizard slow 35%->30%, multiple Evolutions nerfed. Winners-by-default: fast cycle + air beatdown.",
+  "top_meta_decks": [
+    {
+      "name": "Hog 2.6 Cycle (highest-usage ladder deck)",
+      "avg_elixir": 2.6,
+      "cards": ["hogrider", "musketeer", "ice_golem", "cannon", "skeletons", "ice_spirit", "fireball", "the_log"],
+      "style": "cycle"
+    },
+    {
+      "name": "P.E.K.K.A Bridge Spam",
+      "avg_elixir": 3.8,
+      "cards": ["pekka", "battle_ram", "bandit", "royal_ghost", "electro_wizard", "magic_archer", "zap", "poison"],
+      "style": "bridge_spam"
+    },
+    {
+      "name": "LavaLoon (air beatdown)",
+      "avg_elixir": 4.0,
+      "cards": ["lava_hound", "balloon", "mega_minion", "skeleton_dragons", "guards", "zappies", "fireball", "tombstone"],
+      "style": "air_beatdown"
+    },
+    {
+      "name": "Golem Beatdown",
+      "avg_elixir": 4.2,
+      "cards": ["golem", "night_witch", "lumberjack", "baby_dragon", "mega_minion", "tornado", "lightning", "skeleton_barrel"],
+      "style": "heavy_beatdown"
+    },
+    {
+      "name": "Log Bait (2nd-best F2P)",
+      "avg_elixir": 3.3,
+      "cards": ["goblin_barrel", "princess", "knight", "goblin_gang", "rocket", "inferno_tower", "the_log", "ice_spirit"],
+      "style": "spell_bait"
+    },
+    {
+      "name": "Ronin Tempo (buffed Sept 1, not nerfed)",
+      "avg_elixir": 3.6,
+      "cards": ["ronin", "golden_knight", "skeleton_barrel", "gracefn", "hunter", "mortar", "barbarian_barrel", "rage"],
+      "style": "tempo"
+    }
+  ],
+  "nerfs_to_avoid": ["goblin_machine", "goblin_giant", "ice_wizard", "evo_baby_dragon", "evo_valkyrie", "evo_witch", "prince"],
+  "free_to_play_pick": "hogrider_deck"
+}

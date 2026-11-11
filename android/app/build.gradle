@@ -1,0 +1,96 @@
+plugins {
+    id "com.android.application" version "7.4.2"
+    id "com.chaquo.python" version "14.0.2"
+}
+
+android {
+    namespace "com.neuroml.app"
+    compileSdk 33
+
+    defaultConfig {
+        applicationId "com.neuroml.app"
+        minSdk 24
+        targetSdk 33
+        versionCode 30
+        versionName "30.0"
+
+        ndk { abiFilters "arm64-v8a" }
+
+        // Chaquopy 14.x DSL: the python {} block lives INSIDE defaultConfig.
+        // (Top-level chaquopy {} only exists from Chaquopy 15.0.)
+        python {
+            version "3.8"
+            // buildPython is Chaquopy's build-tooling interpreter (needs >= 3.10
+            // on CI); the app still targets Python 3.8 above for the torch wheels.
+            buildPython (project.findProperty("chaquopyBuildPython") ?: "python")
+            pip {
+                options("--extra-index-url", "https://chaquo.com/pypi-13.1")
+                install "torch==1.8.1"   // full-size brain runtime (cp38 arm64 Android wheel)
+                install "Pillow"
+                install "numpy"
+            }
+        }
+    }
+
+    signingConfigs {
+        // Sideload-friendly: debug-signed release so users can install the APK
+        // without managing keystore passwords. The keystore is COMMITTED to the
+        // repo (debug-grade only) so every CI build and every user's install
+        // shares one stable signature — updates install in place instead of
+        // needing uninstall-reinstall after every release.
+        debug {
+            storeFile file("keystore/debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+
+// The REAL bot ships inside the APK: copy the public_gui code (same code that
+// runs on the desktop) into the Python source folder at build time, plus the
+// json data files into assets (extracted to filesDir on first run so relative
+// path logic in bot_ml.py works unchanged).
+def botSrc = "../../public_gui"
+
+tasks.register("copyBotPython", Copy) {
+    from(botSrc) {
+        include "*.py"
+        exclude "test_*.py"
+        exclude "android_main.py"
+    }
+    into "src/main/python"   // top-level so `import bot_ml` works unchanged
+}
+
+tasks.register("copyBotData", Copy) {
+    from(botSrc) {
+        // cards_v2.json is REQUIRED: the canonical card DB the deck-aware
+        // counter hotfix validates every deck against. meta_decks/cards are
+        // shipped reference data too.
+        include "cards.json", "my_deck.json", "meta_decks.json", "cards_v2.json"
+        // bot_config.json ships as an Android template instead (device: local)
+    }
+    into "src/main/assets/neuroml"
+}
+
+def copyBotPythonResolved = tasks.named("copyBotPython")
+def copyBotDataResolved = tasks.named("copyBotData")
+
+tasks.named("preBuild") {
+    dependsOn copyBotPythonResolved, copyBotDataResolved
+}
+
+dependencies {
+    implementation "androidx.appcompat:appcompat:1.6.1"
+    implementation "androidx.constraintlayout:constraintlayout:2.1.4"
+}

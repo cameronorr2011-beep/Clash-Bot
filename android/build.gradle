@@ -1,0 +1,3 @@
+// Plugin versions are declared in app/build.gradle (single-module project).
+// Keeping this file empty avoids versionless/ versioned plugin-request
+// ambiguity in the `plugins {}` DSL.

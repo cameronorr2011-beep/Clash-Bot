@@ -1,0 +1,20 @@
+{
+  "device": "192.168.1.131:37875",
+  "screen": {"w": 1080, "h": 2340},
+  "shot_w": 640,
+  "shot_h": 1664,
+  "tabs": {
+    "battle_tab": [602, 1870],
+    "collection_tab": [346, 1870],
+    "shop_tab": [160, 1870]
+  },
+  "battle": {
+    "battle_button": [602, 2060],
+    "card_hand_y": 2060,
+    "card_slots_x": [143, 385, 629, 872],
+    "field_x": [235, 540, 845],
+    "field_y": [550, 790, 1030, 1270]
+  },
+  "loop_interval_s": 5,
+  "max_cards_per_cycle": 2
+}
